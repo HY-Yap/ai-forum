@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <link rel="icon" type="image/png" href="static/logo.png" />
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Edit Groups</title>
+        <style>
+            :root {
+                --max-w: 560px;
+                --gap: 1rem;
+            }
+            html,
+            body {
+                height: 100%;
+                margin: 0;
+                font-family: system-ui, sans-serif;
+            }
+            /* center pane */
+            .centered {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100%;
+            }
+            #pane {
+                width: 90%;
+                max-width: var(--max-w);
+            }
+            input,
+            textarea,
+            select,
+            button {
+                width: 100%;
+                padding: 0.6rem;
+                font-size: 1rem;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                box-sizing: border-box;
+            }
+            label {
+                display: block;
+                font-weight: 600;
+                margin: 0.8rem 0 0.3rem;
+            }
+            button {
+                background: #008cff;
+                color: #fff;
+                border: none;
+                cursor: pointer;
+            }
+            button:disabled {
+                background: #aaa;
+                cursor: not-allowed;
+            }
+            textarea {
+                resize: vertical;
+                min-height: 6rem;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="centered">
+            <div id="pane">
+                <h1 style="margin-top: 0">Edit Group Details</h1>
+
+                <div id="authPane">
+                    <input id="email" placeholder="admin email" />
+                    <input
+                        id="pw"
+                        type="password"
+                        placeholder="password"
+                        style="margin-top: 0.5rem"
+                    />
+                    <button id="loginBtn" style="margin-top: 0.8rem">
+                        Login
+                    </button>
+                </div>
+
+                <div id="editor" hidden>
+                    <label>Select group</label>
+                    <select id="groupSelect"></select>
+
+                    <div id="formArea" hidden>
+                        <label>Title</label>
+                        <input id="titleInput" />
+
+                        <label>Description</label>
+                        <textarea id="summaryInput"></textarea>
+
+                        <button
+                            id="saveBtn"
+                            disabled
+                            style="margin-top: 0.8rem"
+                        >
+                            Save
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script type="module">
+            import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+            import {
+                getAuth,
+                signInWithEmailAndPassword,
+                onAuthStateChanged,
+            } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+            import {
+                getFirestore,
+                collection,
+                getDocs,
+                doc,
+                updateDoc,
+            } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+            /* --- your SAME config --- */
+            const firebaseConfig = {
+                apiKey: "AIzaSyDVAcn7pltFMN3jcSETaDmX5Y9q3pyVJqU",
+                authDomain: "ai-forum-147a0.firebaseapp.com",
+                projectId: "ai-forum-147a0",
+                storageBucket: "ai-forum-147a0.firebasestorage.app",
+                messagingSenderId: "273056723848",
+                appId: "1:273056723848:web:92f98468e1f2643680c03d",
+            };
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+            const auth = getAuth(app);
+
+            /* ------------- login ---------------- */
+            document.getElementById("loginBtn").onclick = async () => {
+                const em = email.value.trim(),
+                    pw = pwInput.value;
+                try {
+                    await signInWithEmailAndPassword(auth, em, pw);
+                } catch (e) {
+                    alert("Login failed: " + e.message);
+                }
+            };
+            const email = document.getElementById("email");
+            const pwInput = document.getElementById("pw");
+
+            onAuthStateChanged(auth, async (user) => {
+                if (!user) return;
+                authPane.hidden = true;
+                editor.hidden = false;
+
+                /* fetch groups once */
+                const groups = {};
+                (await getDocs(collection(db, "groups"))).forEach(
+                    (d) => (groups[d.id] = d.data())
+                );
+
+                /* populate dropdown */
+                const sel = document.getElementById("groupSelect");
+                Object.keys(groups)
+                    .sort()
+                    .forEach((id) => {
+                        const opt = document.createElement("option");
+                        opt.value = id;
+                        opt.textContent = `Group ${id.replace(/\D+/g, "")}: ${
+                            groups[id].title
+                        }`;
+                        sel.appendChild(opt);
+                    });
+
+                /* state */
+                let currentId = null;
+                let dirty = false;
+
+                const titleInp = document.getElementById("titleInput");
+                const summaryInp = document.getElementById("summaryInput");
+                const saveBtn = document.getElementById("saveBtn");
+                const formArea = document.getElementById("formArea");
+
+                const setDirty = () => {
+                    dirty =
+                        titleInp.value.trim() !== groups[currentId].title ||
+                        summaryInp.value.trim() !== groups[currentId].summary;
+                    saveBtn.disabled = !dirty;
+                };
+                titleInp.oninput = summaryInp.oninput = setDirty;
+
+                saveBtn.onclick = async () => {
+                    try {
+                        saveBtn.disabled = true;
+                        saveBtn.textContent = "Saving…";
+                        await updateDoc(doc(db, "groups", currentId), {
+                            title: titleInp.value.trim(),
+                            summary: summaryInp.value.trim(),
+                        });
+                        groups[currentId] = {
+                            title: titleInp.value.trim(),
+                            summary: summaryInp.value.trim(),
+                        };
+                        sel.querySelector(
+                            `option[value="${currentId}"]`
+                        ).textContent = `Group ${currentId.replace(
+                            /\D+/g,
+                            ""
+                        )}: ${groups[currentId].title}`;
+                        dirty = false;
+                        alert("Saved ✔");
+                    } catch (e) {
+                        alert("Save failed: " + e.message);
+                        saveBtn.disabled = false;
+                    } finally {
+                        saveBtn.textContent = "Save";
+                    }
+                };
+
+                async function maybeSwitch(toId) {
+                    if (!dirty) {
+                        load(toId);
+                        return;
+                    }
+
+                    const ans = confirm(
+                        "Save changes before switching?\nOK = Save, Cancel = Discard"
+                    );
+                    if (ans) {
+                        await saveBtn.onclick();
+                        load(toId);
+                    } else {
+                        load(toId);
+                    }
+                }
+
+                function load(id) {
+                    currentId = id;
+                    titleInp.value = groups[id].title;
+                    summaryInp.value = groups[id].summary;
+                    dirty = false;
+                    saveBtn.disabled = true;
+                    formArea.hidden = false;
+                }
+
+                sel.onchange = () => maybeSwitch(sel.value);
+                load(sel.value); // load first group
+            });
+        </script>
+    </body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <link rel="icon" type="image/png" href="static/logo.png" />
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>AI Forum – Project Showcase</title>
+        <style>
+            :root {
+                --gap: 1.2rem;
+            }
+            body {
+                font-family: system-ui, sans-serif;
+                margin: 0;
+                padding: 2rem;
+            }
+            h1 {
+                margin-top: 0;
+            }
+
+            /* mobile = single column (flex stack) */
+            #group-grid {
+                display: flex;
+                flex-direction: column;
+                gap: var(--gap);
+            }
+
+            /* ≥600 px → 2-column masonry */
+            @media (min-width: 600px) {
+                #group-grid {
+                    column-count: 2;
+                    column-gap: var(--gap);
+                }
+                .card {
+                    break-inside: avoid;
+                    margin-bottom: var(--gap);
+                }
+            }
+            /* ≥900 px → 3 columns */
+            @media (min-width: 900px) {
+                #group-grid {
+                    column-count: 3;
+                }
+            }
+
+            .card {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 1rem;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+            }
+            .card h2 {
+                margin: 0.2rem 0 0.6rem;
+                font-size: 1.1rem;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Project Showcase</h1>
+        <p>Explore what each team is building before you cast your vote.</p>
+
+        <div id="group-grid"></div>
+
+        <script type="module">
+            import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+            import {
+                getFirestore,
+                collection,
+                getDocs,
+            } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-lite.js";
+
+            /* Firebase config */
+            const firebaseConfig = {
+                apiKey: "AIzaSyDVAcn7pltFMN3jcSETaDmX5Y9q3pyVJqU",
+                authDomain: "ai-forum-147a0.firebaseapp.com",
+                projectId: "ai-forum-147a0",
+                storageBucket: "ai-forum-147a0.firebasestorage.app",
+                messagingSenderId: "273056723848",
+                appId: "1:273056723848:web:92f98468e1f2643680c03d",
+            };
+
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+
+            /* fetch → numeric sort → render */
+            const grid = document.getElementById("group-grid");
+            const snap = await getDocs(collection(db, "groups"));
+
+            snap.docs
+                .sort(
+                    (a, b) =>
+                        parseInt(a.id.replace(/\D+/g, ""), 10) -
+                        parseInt(b.id.replace(/\D+/g, ""), 10)
+                )
+                .forEach((d) => {
+                    const { title, summary } = d.data();
+                    const num = d.id.replace(/\D+/g, "");
+                    const el = document.createElement("div");
+                    el.className = "card";
+                    el.innerHTML = `<h2>Group ${num}: ${title}</h2><p>${summary}</p>`;
+                    grid.appendChild(el);
+                });
+        </script>
+    </body>
+</html>

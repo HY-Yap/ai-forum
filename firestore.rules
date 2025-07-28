@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ---------- helper ---------- */
+    function isAdmin() {
+      return request.auth != null &&
+             request.auth.token.email == 'yaphanyang09@gmail.com';
+    }
+
+    /* ---------- groups ---------- */
+    match /groups/{g} {
+      allow read : if true;
+      allow write: if isAdmin();      // only you may edit titles/descriptions
+    }
+
+    /* ---------- voters ---------- */
+    match /voters/{token} {
+
+      /* everyone (and the leaderboard) can read */
+      allow read: if true;
+
+      /* update votes (max 4), weight must stay the same */
+      allow update: if (
+        /* 1️⃣ weight either unchanged OR omitted in this write */
+        (
+          !('weight' in request.resource.data) ||
+          request.resource.data.weight == resource.data.weight
+        ) &&
+
+        /* 2️⃣ no extra keys beyond votes / weight */
+        request.resource.data.keys().hasOnly(['votes','weight']) &&
+
+        /* 3️⃣ votes is list ≤ 4 */
+        request.resource.data.votes is list &&
+        request.resource.data.votes.size() <= 4
+      ) || isAdmin();
+
+      /* no client create/delete */
+      allow create, delete: if false;
+    }
+  }
+}

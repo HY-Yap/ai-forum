@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <link rel="icon" type="image/png" href="static/logo.png" />
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>AI Forum – Live Results</title>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                padding: 1rem;
+            }
+            h1 {
+                margin-top: 0;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th,
+            td {
+                padding: 0.6rem;
+                border-bottom: 1px solid #ddd;
+                text-align: left;
+            }
+            th {
+                background: #f5f5f5;
+            }
+            @media (max-width: 500px) {
+                td:nth-child(3),
+                th:nth-child(3) {
+                    display: none;
+                }
+            }
+            tbody tr {
+                transition: transform 0.4s ease;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Live Weighted Results</h1>
+        <div id="authPane">
+            <input id="email" placeholder="admin email" />
+            <input id="pw" type="password" placeholder="password" />
+            <button id="loginBtn">Login</button>
+        </div>
+
+        <button id="resetBtn" hidden style="margin-bottom: 1rem">
+            Reset all votes
+        </button>
+        <table id="tbl">
+            <thead>
+                <tr>
+                    <th>Group</th>
+                    <th>Votes</th>
+                    <th>Raw</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <script type="module">
+            import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+            import {
+                getAuth,
+                signInWithEmailAndPassword,
+                onAuthStateChanged,
+            } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+            import {
+                getFirestore,
+                collection,
+                getDocs,
+                onSnapshot,
+                writeBatch,
+            } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+            const firebaseConfig = {
+                apiKey: "AIzaSyDVAcn7pltFMN3jcSETaDmX5Y9q3pyVJqU",
+                authDomain: "ai-forum-147a0.firebaseapp.com",
+                projectId: "ai-forum-147a0",
+                storageBucket: "ai-forum-147a0.firebasestorage.app",
+                messagingSenderId: "273056723848",
+                appId: "1:273056723848:web:92f98468e1f2643680c03d",
+            };
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+
+            const tblBody = document.querySelector("#tbl tbody");
+            const groups = {};
+            (await getDocs(collection(db, "groups"))).forEach(
+                (d) => (groups[d.id] = d.data().title)
+            );
+
+            /* ------------------------------------------------------------------ *
+             *  FLIP helpers                                                      *
+             * ------------------------------------------------------------------ */
+            const getPos = (el) => el.getBoundingClientRect().top;
+
+            function animateReorder(rows) {
+                // 1️⃣ store old positions
+                const first = new Map();
+                rows.forEach((r) => first.set(r, getPos(r)));
+
+                // 2️⃣ apply new order in the DOM
+                rows.forEach((r) => tblBody.appendChild(r));
+
+                // 3️⃣ measure new positions and invert
+                rows.forEach((r) => {
+                    const last = getPos(r);
+                    const invert = first.get(r) - last;
+                    r.style.transform = `translateY(${invert}px)`;
+                    r.style.transition = "transform 0s"; // jump to inverted start
+                    requestAnimationFrame(() => {
+                        r.style.transition = "transform .4s ease";
+                        r.style.transform = ""; // smooth to 0
+                    });
+                });
+            }
+
+            /* ------------------------------------------------------------------ *
+             *  live snapshot listener                                            *
+             * ------------------------------------------------------------------ */
+            const rows = {}; // cache DOM <tr> for each gid
+
+            onSnapshot(collection(db, "voters"), (snap) => {
+                const tally = {};
+                const rawCnt = {};
+
+                snap.forEach((d) => {
+                    const { votes = [], weight = 1 } = d.data();
+                    votes.forEach((gid) => {
+                        tally[gid] = (tally[gid] || 0) + weight;
+                        rawCnt[gid] = (rawCnt[gid] || 0) + 1;
+                    });
+                });
+
+                // create/update rows, collect into array
+                const allRows = Object.keys(groups).map((gid) => {
+                    if (!rows[gid]) {
+                        const tr = document.createElement("tr");
+                        tr.dataset.num = gid.replace(/\D+/g, ""); // ← add this line
+                        tr.innerHTML = `
+    <td class="title"></td><td class="votes"></td><td class="raw"></td>`;
+                        rows[gid] = tr;
+                    }
+                    const tr = rows[gid];
+                    tr.querySelector(
+                        ".title"
+                    ).textContent = `Group ${gid.replace(/\D+/g, "")}: ${
+                        groups[gid]
+                    }`;
+                    tr.querySelector(".votes").textContent = tally[gid] || 0;
+                    tr.querySelector(".raw").textContent = rawCnt[gid] || 0;
+                    return tr;
+                });
+
+                // sort rows: 1) votes DESC, 2) numeric group id ASC
+                allRows.sort((a, b) => {
+                    const aVotes =
+                        parseInt(a.querySelector(".votes").textContent, 10) ||
+                        0;
+                    const bVotes =
+                        parseInt(b.querySelector(".votes").textContent, 10) ||
+                        0;
+
+                    if (bVotes !== aVotes) return bVotes - aVotes; // primary
+
+                    const aNum = parseInt(a.dataset.num, 10);
+                    const bNum = parseInt(b.dataset.num, 10);
+                    return aNum - bNum; // secondary
+                });
+
+                // animate into new order
+                animateReorder(allRows);
+            });
+
+            // auth
+            const auth = getAuth(app);
+
+            document
+                .getElementById("loginBtn")
+                .addEventListener("click", async () => {
+                    const email = document.getElementById("email").value.trim();
+                    const pw = document.getElementById("pw").value;
+                    try {
+                        await signInWithEmailAndPassword(auth, email, pw);
+                    } catch (e) {
+                        alert("Login failed: " + e.message);
+                    }
+                });
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    document.getElementById("authPane").hidden = true;
+                    document.getElementById("resetBtn").hidden = false;
+                }
+            });
+
+            document
+                .getElementById("resetBtn")
+                .addEventListener("click", async () => {
+                    if (!confirm("Really clear EVERYONE’s votes?")) return;
+
+                    const votersSnap = await getDocs(collection(db, "voters"));
+                    const batch = writeBatch(db);
+                    votersSnap.forEach((d) =>
+                        batch.update(d.ref, { votes: [] })
+                    );
+                    await batch.commit();
+
+                    alert(`Reset done – ${votersSnap.size} voters cleared.`);
+                });
+        </script>
+    </body>
+</html>

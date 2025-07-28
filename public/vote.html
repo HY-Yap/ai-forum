@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <link rel="icon" type="image/png" href="static/logo.png" />
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>AI Forum – Cast Your Vote</title>
+        <style>
+            :root {
+                --gap: 1rem;
+                --card-pad: 1rem;
+                --max-votes: 4;
+            }
+            body {
+                font-family: system-ui, sans-serif;
+                margin: 0;
+                padding: var(--gap);
+            }
+            h1 {
+                margin-top: 0;
+                font-size: clamp(1.4rem, 4vw, 2rem);
+            }
+            #grid {
+                display: flex;
+                flex-direction: column;
+                gap: var(--gap);
+            }
+            @media (min-width: 600px) {
+                #grid {
+                    column-count: 2;
+                    column-gap: var(--gap);
+                }
+                .card {
+                    break-inside: avoid;
+                    margin-bottom: var(--gap);
+                }
+            }
+            @media (min-width: 900px) {
+                #grid {
+                    column-count: 3;
+                }
+            }
+            .card {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: var(--card-pad);
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+            }
+            .card h2 {
+                margin: 0 0 0.5rem;
+                font-size: 1rem;
+                line-height: 1.2;
+            }
+            .card p {
+                margin: 0 0 0.8rem;
+                font-size: 0.9rem;
+            }
+            .card label {
+                display: block;
+                cursor: pointer;
+                padding: 0.4rem;
+                text-align: center;
+                background: #f0f0f0;
+                border-radius: 6px;
+                font-weight: 600;
+            }
+            .card input:checked + label {
+                background: #008cff;
+                color: #fff;
+            }
+            #count {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                text-align: center;
+                font-weight: 600;
+                pointer-events: none;
+                background: #008cff;
+                padding: 12px;
+            }
+            #toast {
+                position: fixed;
+                bottom: 1.5rem;
+                left: 50%;
+                transform: translateX(-50%);
+                background: #ff5252;
+                color: #fff;
+                padding: 0.6rem 1.2rem;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: 0.9rem;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+                opacity: 0;
+                transition: opacity 0.25s ease;
+                pointer-events: none;
+            }
+            #toast.show {
+                opacity: 1;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Select up to <span id="max-count">4</span> projects</h1>
+        <div id="grid"></div>
+        <div id="count"></div>
+        <div id="toast" hidden>Max 4 selected</div>
+
+        <script type="module">
+            import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+            import {
+                getFirestore,
+                collection,
+                getDocs,
+                doc,
+                onSnapshot,
+                updateDoc,
+            } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+            /* --- Firebase --- */
+            const firebaseConfig = {
+                apiKey: "AIzaSyDVAcn7pltFMN3jcSETaDmX5Y9q3pyVJqU",
+                authDomain: "ai-forum-147a0.firebaseapp.com",
+                projectId: "ai-forum-147a0",
+                storageBucket: "ai-forum-147a0.firebasestorage.app",
+                messagingSenderId: "273056723848",
+                appId: "1:273056723848:web:92f98468e1f2643680c03d",
+            };
+            const app = initializeApp(firebaseConfig);
+            const db = getFirestore(app);
+
+            /* --- token guard --- */
+            const token = new URLSearchParams(location.search).get("token");
+            if (!token) {
+                document.body.innerHTML =
+                    "<p style='color:red'>Missing token.</p>";
+                throw "no token";
+            }
+
+            /* --- dom refs --- */
+            const grid = document.getElementById("grid");
+            const maxCnt = parseInt(
+                document.getElementById("max-count").textContent,
+                10
+            );
+            const count = document.getElementById("count");
+
+            /* --- fetch & render groups in numeric order --- */
+            const snap = await getDocs(collection(db, "groups"));
+            snap.docs
+                .sort(
+                    (a, b) =>
+                        parseInt(a.id.replace(/\D+/g, ""), 10) -
+                        parseInt(b.id.replace(/\D+/g, ""), 10)
+                )
+                .forEach((d) => makeCard(d.id, d.data()));
+
+            /* --- sync with Firestore --- */
+            const voterRef = doc(db, "voters", token);
+            onSnapshot(voterRef, (s) => {
+                const chosen = (s.exists() ? s.data().votes : []) ?? [];
+                document.querySelectorAll("input[data-id]").forEach((inp) => {
+                    inp.checked = chosen.includes(inp.dataset.id);
+                });
+                updateCounter();
+            });
+
+            function makeCard(id, data) {
+                const wrap = document.createElement("div");
+                wrap.className = "card";
+                wrap.innerHTML = `<h2>Group ${id.replace(/\D+/g, "")}: ${
+                    data.title
+                }</h2>
+        <p>${data.summary}</p>
+        <input type="checkbox" id="cb-${id}" data-id="${id}" hidden>
+        <label for="cb-${id}">Select</label>`;
+                grid.appendChild(wrap);
+
+                const box = wrap.querySelector("input");
+                box.onchange = () => {
+                    const selected = [
+                        ...document.querySelectorAll("input[data-id]:checked"),
+                    ].map((i) => i.dataset.id);
+                    if (selected.length > maxCnt) {
+                        box.checked = false;
+                        showToast();
+                        return;
+                    }
+                    updateDoc(voterRef, { votes: selected });
+                    updateCounter();
+                };
+            }
+
+            function updateCounter() {
+                const cnt = document.querySelectorAll(
+                    "input[data-id]:checked"
+                ).length;
+                count.textContent = `${cnt}/${maxCnt} selected`;
+            }
+            function showToast() {
+                const t = document.getElementById("toast");
+                if (t.classList.contains("show")) return;
+                t.hidden = false;
+                t.classList.add("show");
+                setTimeout(() => {
+                    t.classList.remove("show");
+                    setTimeout(() => (t.hidden = true), 250);
+                }, 2000);
+            }
+        </script>
+    </body>
+</html>

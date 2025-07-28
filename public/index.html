@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <link rel="icon" type="image/png" href="static/logo.png" />
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>AI Forum Voting Portal</title>
+
+        <style>
+            :root {
+                --brand: #008cff;
+                --gap: 1.5rem;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                font-family: system-ui, sans-serif;
+                min-height: 100dvh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: var(--gap);
+                background: #f8fafc;
+            }
+            .card {
+                max-width: 500px;
+                width: 100%;
+                background: #fff;
+                border-radius: 12px;
+                box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+                padding: var(--gap);
+                text-align: center;
+            }
+            h1 {
+                margin: 0 0 0.5rem;
+                font-size: clamp(1.6rem, 5vw, 2.2rem);
+            }
+            p {
+                margin: 1.2rem 0;
+                color: #555;
+                line-height: 1.45;
+            }
+            .btn {
+                display: block;
+                width: 100%;
+                margin-top: 0.75rem;
+                padding: 0.8rem;
+                border-radius: 8px;
+                font-size: 1rem;
+                font-weight: 600;
+                text-decoration: none;
+                color: #fff;
+                background: var(--brand);
+                transition: background 0.2s;
+            }
+            .btn:hover {
+                background: #0070e6;
+            }
+            .btn.outline {
+                background: transparent;
+                color: var(--brand);
+                border: 2px solid var(--brand);
+            }
+            .btn.outline:hover {
+                background: var(--brand);
+                color: #fff;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>HSAS-HCI AI Forum Portal</h1>
+            <p>
+                Browse the 16 project ideas submitted by our student teams and
+                cast your vote for the <strong>four</strong> best projects.
+            </p>
+
+            <a class="btn outline" href="groups.html">Project&nbsp;Showcase</a>
+            <!-- swap the token in mail-merge or testing -->
+            <p>
+                To cast your vote, click on the personal link that has been
+                emailed to you.
+            </p>
+        </div>
+    </body>
+</html>
